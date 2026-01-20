@@ -50,8 +50,8 @@ A **blazingly fast** REST API that:
 
 ```bash
 # Clone it
-git clone https://github.com/itzmepromgitman/hdhub-bypass.git
-cd hdhub-bypass
+git clone https://github.com/itzmepromgitman/HDhub-bypass-api.git
+cd HDhub-bypass-api
 
 # Install deps
 pip install -r requirements.txt
@@ -280,5 +280,6 @@ The author is not responsible for misuse. 🙃
 </p>
 
 </blockquote>
+
 
 
