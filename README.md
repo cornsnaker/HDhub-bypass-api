@@ -262,7 +262,7 @@ The author is not responsible for misuse. 🙃
 <table>
   <tr>
     <td align="center">
-      <b>🔥 HetArgon 🔥</b><br>
+      <b>🔥 Argon 🔥</b><br>
       <a href="https://t.me/heyargon">📱 Telegram</a> •
       <a href="https://github.com/itzmepromgitman">🐙 GitHub</a>
     </td>
@@ -280,4 +280,5 @@ The author is not responsible for misuse. 🙃
 </p>
 
 </blockquote>
+
 
