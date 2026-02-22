@@ -57,6 +57,17 @@ cd HDhub-bypass-api
 pip install -r requirements.txt
 ```
 
+### 🔧 Configure Domain
+
+Edit `.env` to set the active website URL:
+
+```env
+# Change this when domain updates! 🔄
+WEBSITE_URL=https://hdhub4u.catering
+```
+
+> 💡 **On Vercel**: Set `WEBSITE_URL` in your project's Environment Variables settings instead!
+
 ### ⚡ Run Locally
 
 ```bash
@@ -97,7 +108,7 @@ GET /search?q=breaking+bad
   "results": [
     {
       "title": "Avengers Endgame 2019",
-      "url": "https://4khdhub.dad/avengers-endgame/",
+      "url": "https://hdhub4u.catering/avengers-endgame/",
       "poster": "https://...",
       "year": "2019",
       "type": "movie"
@@ -113,11 +124,11 @@ Extracts all download links with quality, size, and host info.
 
 ```http
 # GET Method (browser-friendly! 🌐)
-GET /find?url=https://4khdhub.dad/some-movie-page/
+GET /find?url=https://hdhub4u.catering/some-movie-page/
 
 # POST Method
 POST /find
-{"url": "https://4khdhub.dad/some-movie-page/"}
+{"url": "https://hdhub4u.catering/some-movie-page/"}
 ```
 
 **Response:**
@@ -144,11 +155,11 @@ POST /find
 ### 🎬 Scrape Page
 ```http
 # GET Method
-GET /scrape?url=https://4khdhub.dad/some-movie-page/
+GET /scrape?url=https://hdhub4u.catering/some-movie-page/
 
 # POST Method
 POST /scrape
-{"url": "https://4khdhub.dad/some-movie-page/"}
+{"url": "https://hdhub4u.catering/some-movie-page/"}
 ```
 
 **Response:**
@@ -187,11 +198,11 @@ POST /bypass
 ### ⚡ Bypass All Links
 ```http
 # GET Method
-GET /bypass_all?url=https://4khdhub.dad/some-movie/
+GET /bypass_all?url=https://hdhub4u.catering/some-movie/
 
 # POST Method
 POST /bypass_all
-{"url": "https://4khdhub.dad/some-movie/"}
+{"url": "https://hdhub4u.catering/some-movie/"}
 ```
 
 Scrapes the page **AND** bypasses all found links in one call! 🔥
@@ -239,6 +250,9 @@ hdhub/
 ├── api/
 │   └── index.py      # FastAPI app + all endpoints
 ├── bypass.py         # Standalone bypass script
+├── .env              # 🔧 Website URL config (easy domain switch!)
+├── .env.example      # Example config for contributors
+├── .gitignore        # Keeps secrets safe
 ├── requirements.txt  # Python dependencies
 ├── vercel.json       # Vercel deployment config
 └── README.md         # You are here! 📍

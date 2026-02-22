@@ -2,6 +2,9 @@
 HDHub Bypass API
 ================
 
+Website URL is configurable via .env file (WEBSITE_URL).
+Domains change often — just update .env and you're good! 🔥
+
 All endpoints support GET (with ?url=... or ?q=...) and POST (with JSON body).
 
 Endpoints:
@@ -13,13 +16,14 @@ Endpoints:
 
 Examples:
   GET  /search?q=avengers
-  GET  /find?url=https://4khdhub.dad/your-movie/
-  POST /find  {"url": "https://4khdhub.dad/your-movie/"}
+  GET  /find?url=https://hdhub4u.catering/your-movie/
+  POST /find  {"url": "https://hdhub4u.catering/your-movie/"}
 
 Usage:
   uvicorn api:app --reload --port 8000
 """
 
+import os
 import re
 import json
 import base64
@@ -27,11 +31,20 @@ import asyncio
 from typing import Optional, List
 from concurrent.futures import ThreadPoolExecutor
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # On Vercel, env vars are set via dashboard
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import requests
 from curl_cffi import requests as curl_requests
+
+# 🔥 Website URL from .env - Change this when domain updates!
+WEBSITE_URL = os.getenv("WEBSITE_URL", "https://hdhub4u.catering").rstrip("/")
 
 # =====================
 # MODELS
@@ -187,7 +200,7 @@ class HDHubScraper:
 
     def search_movies(self, query):
         """Search for movies/series by name on HDHub."""
-        search_url = f"https://4khdhub.dad/?s={query.replace(' ', '+')}"
+        search_url = f"{WEBSITE_URL}/?s={query.replace(' ', '+')}"
         resp = self.session.get(search_url, timeout=30)
         html = resp.text
 
@@ -204,7 +217,7 @@ class HDHubScraper:
 
             # Ensure URL is absolute
             if not url.startswith("http"):
-                url = "https://4khdhub.dad" + url if url.startswith("/") else "https://4khdhub.dad/" + url
+                url = WEBSITE_URL + url if url.startswith("/") else WEBSITE_URL + "/" + url
 
             seen_urls.add(url)
             item = {"url": url}
@@ -381,6 +394,7 @@ executor = ThreadPoolExecutor(max_workers=5)
 async def root():
     return {
         "message": "🎬 HDHub Bypass API 🔥",
+        "active_domain": WEBSITE_URL,
         "endpoints": {
             "/search": "GET - Search movies/series by name (use ?q=movie+name)",
             "/scrape": "GET/POST - Extract download links from page (use ?url=...)",
@@ -390,7 +404,7 @@ async def root():
         },
         "examples": {
             "search": "/search?q=avengers",
-            "find": "/find?url=https://4khdhub.dad/your-movie-page/"
+            "find": f"/find?url={WEBSITE_URL}/your-movie-page/"
         }
     }
 

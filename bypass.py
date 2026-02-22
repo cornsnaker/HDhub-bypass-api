@@ -1,13 +1,22 @@
+import os
 import time
 import re
 from urllib.parse import urlparse, parse_qs
 import json
 import base64
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 from curl_cffi import requests
 
 import requests as std_requests
+
+# 🔥 Website URL from .env
+WEBSITE_URL = os.getenv("WEBSITE_URL", "https://hdhub4u.catering").rstrip("/")
 
 class HDHubBypass:
     def __init__(self):
@@ -309,7 +318,7 @@ if __name__ == "__main__":
         start_url = sys.argv[1]
     else:
         # Default/Test
-        start_url = "https://4khdhub.dad/love-through-a-prism-series-5331/"
+        start_url = f"{WEBSITE_URL}/love-through-a-prism-series-5331/"
 
     bypass = HDHubBypass()
     bypass.run(start_url)
