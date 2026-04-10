@@ -28,6 +28,20 @@ class HDHubBypass:
             "Accept-Language": "en-US,en;q=0.9",
         })
 
+        # Proxy support — configure via PROXY_URL env var
+        # Supports both http://user:pass@host:port and host:port:user:pass formats
+        proxy_url = os.getenv("PROXY_URL", "").strip()
+        if proxy_url and not proxy_url.startswith("http"):
+            parts = proxy_url.split(":")
+            if len(parts) == 4:
+                host, port, user, passwd = parts
+                proxy_url = f"http://{user}:{passwd}@{host}:{port}"
+            elif len(parts) == 2:
+                proxy_url = f"http://{proxy_url}"
+        self.proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else {}
+        if self.proxies:
+            self.std_session.proxies.update(self.proxies)
+
         # Fallback session (curl_cffi) - Initialized lazily
         self.curl_session = None
 
@@ -36,6 +50,8 @@ class HDHubBypass:
              self.curl_session = requests.Session()
              self.curl_session.impersonate = "chrome110"
              self.curl_session.headers = self.std_session.headers
+             if self.proxies:
+                 self.curl_session.proxies = self.proxies
         return self.curl_session
 
     def _get(self, url):
@@ -184,7 +200,25 @@ class HDHubBypass:
             # Log: https://hubcloud.foo/drive/gosaa50wlwy24k3
             # Navigate there
             print(f"[*] Navigating to HubCloud: {next_url}")
-            # time.sleep(1)
+
+            # Handle hblinks.dad intermediate pages — scrape for hubcloud/hubdrive links
+            if "hblinks.dad" in next_url:
+                print(f"[*] Detected HBLinks intermediate page: {next_url}")
+                resp = self._get(next_url)
+                hb_links = re.findall(r'href="([^"]*(?:hubcloud|hubdrive)[^"]*)"', resp.text, re.IGNORECASE)
+                # Deduplicate
+                seen = set()
+                unique_hb = []
+                for lnk in hb_links:
+                    cleaned = lnk.replace("&amp;", "&")
+                    if cleaned not in seen:
+                        seen.add(cleaned)
+                        unique_hb.append(cleaned)
+                if not unique_hb:
+                    print("[!] No hubcloud/hubdrive links found on HBLinks page.")
+                    return
+                print(f"[*] Found {len(unique_hb)} hubcloud/hubdrive link(s), using first...")
+                next_url = unique_hb[0]
 
             resp = self._get(next_url)
 
