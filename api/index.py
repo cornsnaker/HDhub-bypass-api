@@ -82,45 +82,68 @@ class BypassResponse(BaseModel):
 
 class HDHubBypass:
     def __init__(self):
-        self.std_session = requests.Session()
-        self.std_session.headers.update({
+        self._default_headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
-        })
-        self.curl_session = None
-        # Proxy provided by user
-        self.proxy = "http://vSRHawGqa:LYyvCqiYL@45.152.118.135:62738"
-        self.proxies = {"http": self.proxy, "https": self.proxy}
-        self.std_session.proxies.update(self.proxies)
+        }
 
-    def _get_curl_session(self):
+        # Proxy is optional — configure via PROXY_URL env var
+        proxy_url = os.getenv("PROXY_URL", "").strip()
+        self.proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else {}
+
+        self.std_session = requests.Session()
+        self.std_session.headers.update(self._default_headers)
+        if self.proxies:
+            self.std_session.proxies.update(self.proxies)
+
+        self.curl_session = None
+
+    def _get_curl_session(self, use_proxy=True):
         if not self.curl_session:
             self.curl_session = curl_requests.Session()
             self.curl_session.impersonate = "chrome120"
-            self.curl_session.proxies = self.proxies
-            # Copy headers but EXCLUDE User-Agent so curl_cffi generates the correct one for the fingerprint
-            headers = {k: v for k, v in self.std_session.headers.items() if k.lower() != "user-agent"}
+            if use_proxy and self.proxies:
+                self.curl_session.proxies = self.proxies
+            headers = {k: v for k, v in self._default_headers.items() if k.lower() != "user-agent"}
             self.curl_session.headers.update(headers)
         return self.curl_session
 
     def _get(self, url, headers=None, timeout=15):
-        try:
-            # Merge headers if provided
-            req_headers = self.std_session.headers.copy()
-            if headers:
-                req_headers.update(headers)
+        req_headers = dict(self._default_headers)
+        if headers:
+            req_headers.update(headers)
 
+        # Try 1: standard requests (with proxy if configured)
+        try:
             resp = self.std_session.get(url, headers=req_headers, timeout=timeout)
             if resp.status_code in [403, 503]:
-                raise Exception("CF Block")
+                raise Exception(f"CF Block ({resp.status_code})")
             return resp
-        except:
-            # Fallback to curl_cffi with same headers
+        except Exception as e:
+            print(f"[*] std_session failed: {e}")
+
+        # Try 2: curl_cffi (with proxy if configured)
+        try:
             s = self._get_curl_session()
             if headers:
                 s.headers.update(headers)
             return s.get(url, timeout=30)
+        except Exception as e:
+            print(f"[*] curl_cffi failed: {e}")
+
+        # Try 3: direct connection without proxy (if proxy was configured)
+        if self.proxies:
+            try:
+                print("[*] Retrying without proxy...")
+                resp = requests.get(url, headers=req_headers, timeout=timeout)
+                if resp.status_code in [403, 503]:
+                    raise Exception(f"CF Block ({resp.status_code})")
+                return resp
+            except Exception as e:
+                print(f"[*] Direct request also failed: {e}")
+
+        raise Exception(f"All request methods failed for {url}")
 
     def rot13(self, s):
         res = []
