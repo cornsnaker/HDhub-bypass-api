@@ -30,7 +30,7 @@ import base64
 import asyncio
 from typing import Optional, List
 from concurrent.futures import ThreadPoolExecutor
-from urllib.parse import quote as url_quote
+from urllib.parse import quote as url_quote, urlparse
 
 try:
     from dotenv import load_dotenv
@@ -101,7 +101,24 @@ class HDHubBypass:
                 proxy_url = f"http://{url_quote(user, safe='')}:{url_quote(passwd, safe='')}@{host}:{port}"
             elif len(parts) == 2:
                 proxy_url = f"http://{proxy_url}"
+
+        # Validate proxy URL if configured
+        if proxy_url:
+            parsed = urlparse(proxy_url)
+            if not parsed.hostname:
+                print(f"[!] WARNING: PROXY_URL has no hostname — disabling proxy: {proxy_url}")
+                print(f"[!] Expected format: http://user:pass@host:port")
+                proxy_url = ""
+            elif not parsed.port:
+                print(f"[!] WARNING: PROXY_URL has no port — disabling proxy: {proxy_url}")
+                print(f"[!] Expected format: http://user:pass@host:port")
+                proxy_url = ""
+            else:
+                print(f"[*] Proxy configured: {parsed.hostname}:{parsed.port}")
+
         self.proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else {}
+        if not self.proxies:
+            print("[*] No proxy configured — connecting directly")
 
         self.std_session = requests.Session()
         self.std_session.headers.update(self._default_headers)
