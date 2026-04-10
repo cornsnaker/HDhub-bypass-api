@@ -39,6 +39,7 @@ except ImportError:
     pass  # On Vercel, env vars are set via dashboard
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import requests
@@ -100,7 +101,23 @@ class HDHubBypass:
                 proxy_url = f"http://{url_quote(user, safe='')}:{url_quote(passwd, safe='')}@{host}:{port}"
             elif len(parts) == 2:
                 proxy_url = f"http://{proxy_url}"
+        # Validate proxy URL before using it
+        if proxy_url:
+            try:
+                from urllib.parse import urlparse as _urlparse
+                parsed = _urlparse(proxy_url)
+                if not parsed.hostname or not parsed.port:
+                    print(f"[!] Warning: Proxy URL appears malformed (missing host or port): {proxy_url}")
+                    proxy_url = ""
+            except Exception:
+                print(f"[!] Warning: Failed to parse proxy URL: {proxy_url}")
+                proxy_url = ""
+
         self.proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else {}
+
+        # Circuit breaker: skip proxy after consecutive failures
+        self._proxy_failures = 0
+        self._proxy_failure_threshold = 2
 
         self.std_session = requests.Session()
         self.std_session.headers.update(self._default_headers)
@@ -124,35 +141,46 @@ class HDHubBypass:
         if headers:
             req_headers.update(headers)
 
-        # Try 1: standard requests (with proxy if configured)
+        use_proxy = self.proxies and self._proxy_failures < self._proxy_failure_threshold
+
+        if use_proxy:
+            # Try 1: standard requests (with proxy)
+            try:
+                resp = self.std_session.get(url, headers=req_headers, timeout=timeout)
+                if resp.status_code in [403, 503]:
+                    raise Exception(f"CF Block ({resp.status_code})")
+                self._proxy_failures = 0
+                return resp
+            except Exception as e:
+                print(f"[*] std_session failed for {url}: {type(e).__name__}")
+
+            # Try 2: curl_cffi (with proxy)
+            try:
+                s = self._get_curl_session()
+                if headers:
+                    s.headers.update(headers)
+                resp = s.get(url, timeout=30)
+                self._proxy_failures = 0
+                return resp
+            except Exception as e:
+                print(f"[*] curl_cffi failed for {url}: {type(e).__name__}")
+                self._proxy_failures += 1
+
+        # Try 3: direct connection without proxy
+        if self.proxies and not use_proxy:
+            print(f"[*] Proxy circuit breaker active, using direct connection for {url}")
+        elif self.proxies:
+            print(f"[*] Retrying without proxy for {url}...")
+
         try:
-            resp = self.std_session.get(url, headers=req_headers, timeout=timeout)
+            direct_session = requests.Session()
+            direct_session.headers.update(req_headers)
+            resp = direct_session.get(url, timeout=timeout)
             if resp.status_code in [403, 503]:
                 raise Exception(f"CF Block ({resp.status_code})")
             return resp
         except Exception as e:
-            print(f"[*] std_session failed for {url}: {type(e).__name__}")
-
-        # Try 2: curl_cffi (with proxy if configured)
-        try:
-            s = self._get_curl_session()
-            if headers:
-                s.headers.update(headers)
-            return s.get(url, timeout=30)
-        except Exception as e:
-            print(f"[*] curl_cffi failed for {url}: {type(e).__name__}")
-
-        # Try 3: direct connection without proxy (if proxy was configured)
-        if self.proxies:
-            try:
-                print(f"[*] Retrying without proxy for {url}...")
-                direct_session = requests.Session()
-                direct_session.headers.update(req_headers)
-                resp = direct_session.get(url, timeout=timeout)
-                if resp.status_code in [403, 503]:
-                    raise Exception(f"CF Block ({resp.status_code})")
-                return resp
-            except Exception as e:
+            if self.proxies:
                 print(f"[*] Direct request also failed for {url}: {type(e).__name__}")
 
         raise Exception(f"All request methods failed for {url}")
@@ -481,6 +509,11 @@ app.add_middleware(
 bypasser = HDHubBypass()
 scraper = HDHubScraper()
 executor = ThreadPoolExecutor(max_workers=5)
+
+@app.get("/favicon.ico")
+async def favicon():
+    """Return empty favicon to prevent 404 errors from browsers."""
+    return Response(content=b"", media_type="image/x-icon", status_code=204)
 
 @app.get("/")
 async def root():
