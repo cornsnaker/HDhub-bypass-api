@@ -285,17 +285,12 @@ class HDHubBypass:
 # =====================
 
 class HDHubScraper:
-    def __init__(self, requester=None):
+    def __init__(self, requester):
         self._requester = requester
 
     def _get(self, url):
         """Use the shared HDHubBypass._get() for robust requests with fallback."""
-        if self._requester:
-            return self._requester._get(url)
-        # Fallback if no requester provided (shouldn't happen in production)
-        return requests.get(url, timeout=30, headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        })
+        return self._requester._get(url)
 
     def search_movies(self, query):
         """Search for movies/series by name on HDHub."""
