@@ -99,11 +99,11 @@ class HDHubBypass:
 
         self.curl_session = None
 
-    def _get_curl_session(self, use_proxy=True):
+    def _get_curl_session(self):
         if not self.curl_session:
             self.curl_session = curl_requests.Session()
             self.curl_session.impersonate = "chrome120"
-            if use_proxy and self.proxies:
+            if self.proxies:
                 self.curl_session.proxies = self.proxies
             headers = {k: v for k, v in self._default_headers.items() if k.lower() != "user-agent"}
             self.curl_session.headers.update(headers)
@@ -121,7 +121,7 @@ class HDHubBypass:
                 raise Exception(f"CF Block ({resp.status_code})")
             return resp
         except Exception as e:
-            print(f"[*] std_session failed: {e}")
+            print(f"[*] std_session failed for {url}: {type(e).__name__}")
 
         # Try 2: curl_cffi (with proxy if configured)
         try:
@@ -130,18 +130,20 @@ class HDHubBypass:
                 s.headers.update(headers)
             return s.get(url, timeout=30)
         except Exception as e:
-            print(f"[*] curl_cffi failed: {e}")
+            print(f"[*] curl_cffi failed for {url}: {type(e).__name__}")
 
         # Try 3: direct connection without proxy (if proxy was configured)
         if self.proxies:
             try:
-                print("[*] Retrying without proxy...")
-                resp = requests.get(url, headers=req_headers, timeout=timeout)
+                print(f"[*] Retrying without proxy for {url}...")
+                direct_session = requests.Session()
+                direct_session.headers.update(req_headers)
+                resp = direct_session.get(url, timeout=timeout)
                 if resp.status_code in [403, 503]:
                     raise Exception(f"CF Block ({resp.status_code})")
                 return resp
             except Exception as e:
-                print(f"[*] Direct request also failed: {e}")
+                print(f"[*] Direct request also failed for {url}: {type(e).__name__}")
 
         raise Exception(f"All request methods failed for {url}")
 
