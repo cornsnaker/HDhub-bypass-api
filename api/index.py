@@ -30,6 +30,7 @@ import base64
 import asyncio
 from typing import Optional, List
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import quote as url_quote
 
 try:
     from dotenv import load_dotenv
@@ -96,7 +97,7 @@ class HDHubBypass:
             parts = proxy_url.split(":")
             if len(parts) == 4:
                 host, port, user, passwd = parts
-                proxy_url = f"http://{user}:{passwd}@{host}:{port}"
+                proxy_url = f"http://{url_quote(user, safe='')}:{url_quote(passwd, safe='')}@{host}:{port}"
             elif len(parts) == 2:
                 proxy_url = f"http://{proxy_url}"
         self.proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else {}
