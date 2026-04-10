@@ -30,7 +30,7 @@ import base64
 import asyncio
 from typing import Optional, List
 from concurrent.futures import ThreadPoolExecutor
-from urllib.parse import quote as url_quote
+from urllib.parse import quote as url_quote, urlparse as _urlparse
 
 try:
     from dotenv import load_dotenv
@@ -104,10 +104,9 @@ class HDHubBypass:
         # Validate proxy URL before using it
         if proxy_url:
             try:
-                from urllib.parse import urlparse as _urlparse
                 parsed = _urlparse(proxy_url)
-                if not parsed.hostname or not parsed.port:
-                    print(f"[!] Warning: Proxy URL appears malformed (missing host or port): {proxy_url}")
+                if not parsed.hostname:
+                    print(f"[!] Warning: Proxy URL appears malformed (missing host): {proxy_url}")
                     proxy_url = ""
             except Exception:
                 print(f"[!] Warning: Failed to parse proxy URL: {proxy_url}")
@@ -115,7 +114,9 @@ class HDHubBypass:
 
         self.proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else {}
 
-        # Circuit breaker: skip proxy after consecutive failures
+        # Circuit breaker: skip proxy after consecutive failures.
+        # Resets immediately on any proxy success so the proxy is re-tried
+        # if it recovers mid-session.
         self._proxy_failures = 0
         self._proxy_failure_threshold = 2
 
