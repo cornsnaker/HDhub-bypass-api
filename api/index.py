@@ -30,6 +30,7 @@ import base64
 import asyncio
 from typing import Optional, List
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import quote as url_quote
 
 try:
     from dotenv import load_dotenv
@@ -89,7 +90,16 @@ class HDHubBypass:
         }
 
         # Proxy is optional — configure via PROXY_URL env var
+        # Supports both http://user:pass@host:port and host:port:user:pass formats
         proxy_url = os.getenv("PROXY_URL", "").strip()
+        if proxy_url and not proxy_url.startswith("http"):
+            # Parse host:port:user:pass format
+            parts = proxy_url.split(":")
+            if len(parts) == 4:
+                host, port, user, passwd = parts
+                proxy_url = f"http://{url_quote(user, safe='')}:{url_quote(passwd, safe='')}@{host}:{port}"
+            elif len(parts) == 2:
+                proxy_url = f"http://{proxy_url}"
         self.proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else {}
 
         self.std_session = requests.Session()
@@ -158,6 +168,51 @@ class HDHubBypass:
                 res.append(c)
         return "".join(res)
 
+    def _extract_hblinks(self, html):
+        """Extract hubcloud/hubdrive links from an HBLinks intermediate page."""
+        links = re.findall(r'href="([^"]*(?:hubcloud|hubdrive)[^"]*)"', html, re.IGNORECASE)
+        # Deduplicate while preserving order
+        seen = set()
+        unique = []
+        for link in links:
+            cleaned = link.replace("&amp;", "&")
+            if cleaned not in seen:
+                seen.add(cleaned)
+                unique.append(cleaned)
+        return unique
+
+    def _find_download_button(self, html):
+        """Find the download button URL using multiple patterns."""
+        # Pattern 1: id="download" with href (either order)
+        btn = re.search(r'id="download"[^>]*href="([^"]+)"', html)
+        if btn:
+            return btn.group(1)
+
+        btn = re.search(r'href="([^"]+)"[^>]*id="download"', html)
+        if btn:
+            return btn.group(1)
+
+        # Pattern 2: Anchor with class containing download-related patterns
+        btn = re.search(r'<a[^>]*class="[^"]*btn[^"]*"[^>]*href="([^"]+)"[^>]*>.*?[Dd]ownload', html, re.DOTALL)
+        if btn:
+            return btn.group(1)
+
+        # Pattern 3: Links to known downstream domains
+        for domain in ['hubcloud.php', 'gamerxyt.com', 'carnewz.site']:
+            btn = re.search(r'href="([^"]*' + re.escape(domain) + r'[^"]*)"', html)
+            if btn:
+                return btn.group(1)
+
+        # Pattern 4: data-url or data-href attributes
+        btn = re.search(r'(?:data-url|data-href)="([^"]+)"[^>]*id="download"', html)
+        if btn:
+            return btn.group(1)
+        btn = re.search(r'id="download"[^>]*(?:data-url|data-href)="([^"]+)"', html)
+        if btn:
+            return btn.group(1)
+
+        return None
+
     def bypass_gadgetsweb(self, url):
         result = {"original_url": url, "final_url": None, "filename": None}
 
@@ -181,6 +236,21 @@ class HDHubBypass:
                 raise Exception("HubCloud URL missing")
 
             hubcloud_url = base64.b64decode(hubcloud_b64).decode('utf-8')
+
+            # Handle hblinks.dad intermediate pages — they contain
+            # hubcloud/hubdrive links that need an extra hop
+            if "hblinks.dad" in hubcloud_url:
+                print(f"[*] Detected HBLinks page: {hubcloud_url}")
+                resp = self._get(hubcloud_url, headers={"Referer": url})
+
+                hb_links = self._extract_hblinks(resp.text)
+                if not hb_links:
+                    raise Exception(f"No hubcloud/hubdrive links found on HBLinks page: {hubcloud_url}")
+
+                print(f"[*] Found {len(hb_links)} hubcloud/hubdrive link(s) on HBLinks page")
+                # Use the first valid link as the actual hubcloud URL
+                hubcloud_url = hb_links[0]
+
             # Add Referer to bypass HubCloud protection
             resp = self._get(hubcloud_url, headers={"Referer": url})
 
@@ -188,14 +258,11 @@ class HDHubBypass:
             if title_m:
                 result["filename"] = title_m.group(1).strip()
 
-            btn = re.search(r'id="download"[^>]*href="([^"]+)"', resp.text)
-            if not btn:
-                btn = re.search(r'href="([^"]+)"[^>]*id="download"', resp.text)
-            if not btn:
-                # Debug: Include snippet of HTML to see if we are blocked
+            download_href = self._find_download_button(resp.text)
+            if not download_href:
                 raise Exception(f"Download button not found. Page content: {resp.text[:500]}")
 
-            gamer_url = btn.group(1).replace("&amp;", "&")
+            gamer_url = download_href.replace("&amp;", "&")
             resp = self._get(gamer_url)
 
             final = re.search(r'href="([^"]+)"[^>]*id="fsl"', resp.text)
