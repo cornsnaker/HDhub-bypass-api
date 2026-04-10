@@ -285,16 +285,22 @@ class HDHubBypass:
 # =====================
 
 class HDHubScraper:
-    def __init__(self):
-        self.session = requests.Session()
-        self.session.headers.update({
+    def __init__(self, requester=None):
+        self._requester = requester
+
+    def _get(self, url):
+        """Use the shared HDHubBypass._get() for robust requests with fallback."""
+        if self._requester:
+            return self._requester._get(url)
+        # Fallback if no requester provided (shouldn't happen in production)
+        return requests.get(url, timeout=30, headers={
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         })
 
     def search_movies(self, query):
         """Search for movies/series by name on HDHub."""
         search_url = f"{WEBSITE_URL}/?s={query.replace(' ', '+')}"
-        resp = self.session.get(search_url, timeout=30)
+        resp = self._get(search_url)
         html = resp.text
 
         results = []
@@ -352,7 +358,7 @@ class HDHubScraper:
         }
 
     def scrape_page(self, url):
-        resp = self.session.get(url, timeout=30)
+        resp = self._get(url)
         html = resp.text
 
         is_series = 'series-page.js' in html or 'id="complete-pack"' in html
@@ -480,7 +486,7 @@ app.add_middleware(
 )
 
 bypasser = HDHubBypass()
-scraper = HDHubScraper()
+scraper = HDHubScraper(requester=bypasser)
 executor = ThreadPoolExecutor(max_workers=5)
 
 @app.get("/favicon.ico")
